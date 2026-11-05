@@ -1,0 +1,119 @@
+{
+  "users": [
+    {
+      "id": "usr-adel-mohamed-123",
+      "email": "adelmohamed123@app.local",
+      "password": "w0rkh@st0bed0ne",
+      "full_name": "Adel Mohamed123",
+      "role": "admin",
+      "created_at": "2026-11-04T00:00:00.000Z"
+    }
+  ],
+  "user_settings": [
+    {
+      "id": "settings-usr-adel-mohamed-123",
+      "user_id": "usr-adel-mohamed-123",
+      "currency": "EGP",
+      "locale": "ar",
+      "theme": "light"
+    },
+    {
+      "id": "settings-usr-1793632335785-uzcc5",
+      "user_id": "usr-1793632335785-uzcc5",
+      "currency": "EGP",
+      "locale": "ar",
+      "theme": "system"
+    }
+  ],
+  "clients": [
+    {
+      "id": "client-1793912409599-89a46",
+      "created_at": "2026-11-05T21:00:09.599Z",
+      "updated_at": "2026-11-05T21:00:09.599Z",
+      "user_id": "usr-adel-mohamed-123",
+      "name": "محمد",
+      "contact_info": "",
+      "project_status": "active",
+      "notes": ""
+    },
+    {
+      "id": "client-1793912801462-20k0n",
+      "created_at": "2026-11-05T21:06:41.462Z",
+      "updated_at": "2026-11-05T21:06:41.462Z",
+      "user_id": "usr-adel-mohamed-123",
+      "name": "جمجم",
+      "contact_info": "",
+      "project_status": "active",
+      "notes": ""
+    }
+  ],
+  "transactions": [
+    {
+      "id": "tx-1793912543917-hb725",
+      "created_at": "2026-11-05T21:02:23.917Z",
+      "updated_at": "2026-11-05T21:02:23.917Z",
+      "user_id": "usr-adel-mohamed-123",
+      "client_id": "client-1793912409599-89a46",
+      "date": "2026-11-05",
+      "type": "income",
+      "category": "other",
+      "description": "",
+      "amount": 50000,
+      "payment_status": "paid"
+    },
+    {
+      "id": "tx-1793912581016-wcmdo",
+      "created_at": "2026-11-05T21:03:01.016Z",
+      "updated_at": "2026-11-05T21:03:01.016Z",
+      "user_id": "usr-adel-mohamed-123",
+      "client_id": "client-1793912409599-89a46",
+      "date": "2026-11-05",
+      "type": "expense",
+      "category": "wood",
+      "description": "",
+      "amount": 30000,
+      "payment_status": "paid"
+    },
+    {
+      "id": "tx-1793912604384-yszum",
+      "created_at": "2026-11-05T21:03:24.384Z",
+      "updated_at": "2026-11-05T21:03:24.384Z",
+      "user_id": "usr-adel-mohamed-123",
+      "client_id": "client-1793912409599-89a46",
+      "date": "2026-11-05",
+      "type": "income",
+      "category": "other",
+      "description": "",
+      "amount": 50000,
+      "payment_status": "overdue"
+    },
+    {
+      "id": "tx-1793912827349-sh7uh",
+      "created_at": "2026-11-05T21:07:07.349Z",
+      "updated_at": "2026-11-05T21:07:17.348Z",
+      "user_id": "usr-adel-mohamed-123",
+      "client_id": "client-1793912801462-20k0n",
+      "date": "2026-11-05",
+      "type": "income",
+      "category": "other",
+      "description": "",
+      "amount": 50000,
+      "payment_status": "paid"
+    },
+    {
+      "id": "tx-1793912863101-ujk7v",
+      "created_at": "2026-11-05T21:07:43.101Z",
+      "updated_at": "2026-11-05T21:07:43.101Z",
+      "user_id": "usr-adel-mohamed-123",
+      "client_id": "client-1793912801462-20k0n",
+      "date": "2026-11-05",
+      "type": "expense",
+      "category": "wood",
+      "description": "",
+      "amount": 15000,
+      "payment_status": "paid"
+    }
+  ],
+  "workers": [],
+  "worker_attendance": []
+}
