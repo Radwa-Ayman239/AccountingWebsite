@@ -26,6 +26,14 @@ export function isSupabaseActive(): boolean {
   );
 }
 
+export function shouldUseSupabase(user?: CurrentUser | null): boolean {
+  if (!isSupabaseActive()) return false;
+  if (!user) return false;
+  // If user is from local store or built-in admin (starts with usr-), use localStore
+  if (user.id.startsWith("usr-")) return false;
+  return true;
+}
+
 export async function getCurrentUser(): Promise<CurrentUser | null> {
   if (isSupabaseActive()) {
     try {
@@ -34,30 +42,30 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
         data: { user },
       } = await supabase.auth.getUser();
 
-      if (!user) return null;
+      if (user) {
+        // Extract role from app_metadata (JWT) or fallback to profiles table
+        let role: UserRole = (user.app_metadata?.role as UserRole) || "viewer";
 
-      // Extract role from app_metadata (JWT) or fallback to profiles table
-      let role: UserRole = (user.app_metadata?.role as UserRole) || "viewer";
+        if (!user.app_metadata?.role) {
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("role")
+            .eq("id", user.id)
+            .single();
 
-      if (!user.app_metadata?.role) {
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("role")
-          .eq("id", user.id)
-          .single();
-
-        if (profile?.role) {
-          role = profile.role as UserRole;
+          if (profile?.role) {
+            role = profile.role as UserRole;
+          }
         }
-      }
 
-      return {
-        id: user.id,
-        email: user.email ?? "",
-        fullName: user.user_metadata?.full_name,
-        role,
-        isAdmin: role === "admin",
-      };
+        return {
+          id: user.id,
+          email: user.email ?? "",
+          fullName: user.user_metadata?.full_name,
+          role,
+          isAdmin: role === "admin",
+        };
+      }
     } catch {
       // Fallback to local cookie if Supabase network fails
     }

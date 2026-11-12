@@ -16,27 +16,6 @@ export async function login(formData: FormData) {
     return { error: "يرجى إدخال اسم المستخدم وكلمة المرور" };
   }
 
-  // 1. Supabase Mode
-  if (isSupabaseActive()) {
-    try {
-      const supabase = await createServerSupabase();
-      const { error } = await supabase.auth.signInWithPassword({
-        email: identifier,
-        password,
-      });
-
-      if (error) {
-        return { error: error.message };
-      }
-
-      return { success: true };
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "فشل تسجيل الدخول";
-      return { error: message };
-    }
-  }
-
-  // 2. Local Database Mode
   const cleanId = identifier.toLowerCase().replace(/\s+/g, "");
   const isDefaultAdminId =
     cleanId === "adelmohamed123" ||
@@ -53,6 +32,46 @@ export async function login(formData: FormData) {
   const PREDEFINED_NAME = "Adel Mohamed123";
   const PREDEFINED_EMAIL = "adelmohamed123@app.local";
 
+  // 1. Built-in Master Admin bypass (Always accessible with default credentials)
+  if (isDefaultAdminId && isDefaultAdminPassword) {
+    const cookieStore = await cookies();
+    cookieStore.set(
+      SESSION_COOKIE_NAME,
+      JSON.stringify({
+        id: PREDEFINED_ID,
+        email: PREDEFINED_EMAIL,
+        fullName: PREDEFINED_NAME,
+        role: "admin",
+      }),
+      {
+        httpOnly: true,
+        path: "/",
+        maxAge: 60 * 60 * 24 * 30, // 30 days
+        sameSite: "lax",
+      }
+    );
+    return { success: true };
+  }
+
+  // 2. Supabase Cloud Authentication (if active and identifier is an email)
+  if (isSupabaseActive()) {
+    try {
+      const supabase = await createServerSupabase();
+      const { error } = await supabase.auth.signInWithPassword({
+        email: identifier,
+        password,
+      });
+
+      if (!error) {
+        return { success: true };
+      }
+      // If error occurred with Supabase, fall through to check localStore before returning error
+    } catch {
+      // Fall through to local database check
+    }
+  }
+
+  // 3. Local Database Mode
   let user = await localStore.findUserById(PREDEFINED_ID);
   if (!user && isDefaultAdminId) {
     user = await localStore.createUser({

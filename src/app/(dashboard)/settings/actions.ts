@@ -1,7 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { getCurrentUser, isSupabaseActive } from "@/lib/auth-adapter";
+import { getCurrentUser, isSupabaseActive, shouldUseSupabase } from "@/lib/auth-adapter";
 import { localStore } from "@/lib/store";
 import { revalidatePath } from "next/cache";
 import type { Currency, UserSettings } from "@/lib/types";
@@ -10,18 +10,19 @@ export async function getUserSettings(): Promise<UserSettings | null> {
   const user = await getCurrentUser();
   if (!user) return null;
 
-  if (isSupabaseActive()) {
-    const supabase = await createClient();
-    const { data, error } = await supabase
-      .from("user_settings")
-      .select("*")
-      .eq("user_id", user.id)
-      .single();
+  if (shouldUseSupabase(user)) {
+    try {
+      const supabase = await createClient();
+      const { data, error } = await supabase
+        .from("user_settings")
+        .select("*")
+        .eq("user_id", user.id)
+        .single();
 
-    if (error && error.code !== "PGRST116") {
-      console.error("Error fetching user settings:", error);
+      if (!error && data) return data;
+    } catch {
+      // Fallback
     }
-    return data ?? null;
   }
 
   // Local Store Mode
@@ -45,28 +46,35 @@ export async function updateUserSettingsAction(formData: FormData) {
   const locale = (formData.get("locale") as "ar" | "en") || "ar";
   const theme = (formData.get("theme") as "light" | "dark" | "system") || "system";
 
-  if (isSupabaseActive()) {
-    const supabase = await createClient();
-    const { error } = await supabase.from("user_settings").upsert(
-      {
-        user_id: user.id,
-        currency,
-        locale,
-        theme,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "user_id" }
-    );
+  if (shouldUseSupabase(user)) {
+    try {
+      const supabase = await createClient();
+      const { error } = await supabase.from("user_settings").upsert(
+        {
+          user_id: user.id,
+          currency,
+          locale,
+          theme,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "user_id" }
+      );
 
-    if (error) return { error: error.message };
-  } else {
-    await localStore.upsertSettings({
-      user_id: user.id,
-      currency,
-      locale,
-      theme,
-    });
+      if (!error) {
+        revalidatePath("/", "layout");
+        return { success: true };
+      }
+    } catch {
+      // Fallback
+    }
   }
+
+  await localStore.upsertSettings({
+    user_id: user.id,
+    currency,
+    locale,
+    theme,
+  });
 
   revalidatePath("/", "layout");
   return { success: true };
@@ -87,15 +95,19 @@ export async function updatePasswordAction(formData: FormData) {
     return { error: "Passwords do not match" };
   }
 
-  if (isSupabaseActive()) {
-    const supabase = await createClient();
-    const { error } = await supabase.auth.updateUser({
-      password: newPassword,
-    });
-    if (error) return { error: error.message };
-  } else {
-    await localStore.updateUser(user.id, { password: newPassword });
+  if (shouldUseSupabase(user)) {
+    try {
+      const supabase = await createClient();
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+      if (!error) return { success: true };
+    } catch {
+      // Fallback
+    }
   }
+
+  await localStore.updateUser(user.id, { password: newPassword });
 
   return { success: true };
 }

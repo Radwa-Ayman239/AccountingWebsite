@@ -24,6 +24,7 @@ export interface LocalDatabase {
  * On Vercel (serverless), process.cwd() is /var/task which is read-only.
  * Only /tmp is writable. Detect Vercel and use /tmp/data instead.
  */
+const SEED_PATH = path.join(process.cwd(), "data", "database.json");
 const IS_VERCEL = Boolean(process.env.VERCEL);
 const DB_DIR = IS_VERCEL
   ? path.join("/tmp", "data")
@@ -46,26 +47,46 @@ const INITIAL_DB: LocalDatabase = {
  * read stale data even after a successful save.
  *
  * On Vercel, the filesystem is read-only except /tmp, so the local
- * store uses /tmp/data/database.json. Note: /tmp is ephemeral and
- * not shared across serverless invocations.
+ * store uses /tmp/data/database.json seeded from the bundled data/database.json.
  */
 async function ensureDb(): Promise<LocalDatabase> {
+  // 1. Try reading the writable working database (e.g. /tmp/data/database.json)
   try {
     const data = await fs.readFile(DB_PATH, "utf-8");
     const db = JSON.parse(data) as LocalDatabase;
+    db.users = db.users || [];
+    db.user_settings = db.user_settings || [];
+    db.clients = db.clients || [];
+    db.transactions = db.transactions || [];
     db.workers = db.workers || [];
     db.worker_attendance = db.worker_attendance || [];
     return db;
   } catch {
-    // File doesn't exist yet — bootstrap it
+    // 2. Working copy doesn't exist yet — seed it from the bundled database.json
+    let seedDb: LocalDatabase = INITIAL_DB;
+    try {
+      const seedData = await fs.readFile(SEED_PATH, "utf-8");
+      seedDb = JSON.parse(seedData) as LocalDatabase;
+    } catch {
+      // If seed file cannot be read, fall back to INITIAL_DB
+    }
+
     try {
       await fs.mkdir(path.dirname(DB_PATH), { recursive: true });
-      await fs.writeFile(DB_PATH, JSON.stringify(INITIAL_DB, null, 2), "utf-8");
+      await fs.writeFile(DB_PATH, JSON.stringify(seedDb, null, 2), "utf-8");
     } catch {
-      // If we can't write (e.g. read-only filesystem), return in-memory default
-      console.warn("[localStore] Cannot write to filesystem, returning in-memory defaults");
+      console.warn("[localStore] Cannot write to filesystem, using in-memory defaults");
     }
-    return { ...INITIAL_DB, workers: [], worker_attendance: [] };
+
+    return {
+      ...seedDb,
+      users: seedDb.users || [],
+      user_settings: seedDb.user_settings || [],
+      clients: seedDb.clients || [],
+      transactions: seedDb.transactions || [],
+      workers: seedDb.workers || [],
+      worker_attendance: seedDb.worker_attendance || [],
+    };
   }
 }
 

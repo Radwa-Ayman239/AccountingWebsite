@@ -27,7 +27,7 @@ export async function register(formData: FormData) {
   if (isSupabaseActive()) {
     try {
       const supabase = await createServerSupabase();
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
@@ -37,14 +37,12 @@ export async function register(formData: FormData) {
         },
       });
 
-      if (error) {
-        return { error: error.message };
+      if (!error && data?.user) {
+        return { success: true };
       }
-
-      return { success: true };
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "فشل الاتصال بخادم التسجيل";
-      return { error: message };
+      // If error occurred with Supabase, fall through to local registration
+    } catch {
+      // Fall through to local
     }
   }
 

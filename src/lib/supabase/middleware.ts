@@ -34,37 +34,32 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith("/api/admin");
 
   // ============================================================================
-  // Standalone Local Database Mode
+  // 1. Check Local Session Cookie (Built-in Admin & Local Standalone Mode)
   // ============================================================================
-  if (!isSupabaseActive()) {
-    const localSession = request.cookies.get(SESSION_COOKIE_NAME);
-    let userRole = "viewer";
-    let isLoggedIn = false;
+  const localSession = request.cookies.get(SESSION_COOKIE_NAME);
+  let localRole = "viewer";
+  let hasLocalSession = false;
 
-    if (localSession?.value) {
-      try {
-        const parsed = JSON.parse(localSession.value) as { role?: string };
-        userRole = parsed.role ?? "viewer";
-        isLoggedIn = true;
-      } catch {
-        isLoggedIn = false;
+  if (localSession?.value) {
+    try {
+      const parsed = JSON.parse(localSession.value) as { role?: string; id?: string; email?: string };
+      if (parsed?.id || parsed?.email) {
+        localRole = parsed.role ?? "viewer";
+        hasLocalSession = true;
       }
+    } catch {
+      hasLocalSession = false;
     }
+  }
 
-    if (!isLoggedIn && !isAuthRoute) {
-      const url = request.nextUrl.clone();
-      url.pathname = "/login";
-      return NextResponse.redirect(url);
-    }
-
-    if (isLoggedIn && isAuthRoute) {
+  if (hasLocalSession) {
+    if (isAuthRoute) {
       const url = request.nextUrl.clone();
       url.pathname = "/dashboard";
       return NextResponse.redirect(url);
     }
 
-    // Role-Based Middleware Protection
-    if (isAdminRoute && userRole !== "admin") {
+    if (isAdminRoute && localRole !== "admin") {
       if (pathname.startsWith("/api/")) {
         return NextResponse.json(
           { error: "403 Forbidden: Admin privileges required" },
@@ -80,7 +75,19 @@ export async function updateSession(request: NextRequest) {
   }
 
   // ============================================================================
-  // Supabase Cloud Mode (Layer 2: Auth Token & app_metadata inspection)
+  // 2. Standalone Mode without Local Session
+  // ============================================================================
+  if (!isSupabaseActive()) {
+    if (!isAuthRoute) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/login";
+      return NextResponse.redirect(url);
+    }
+    return supabaseResponse;
+  }
+
+  // ============================================================================
+  // 3. Supabase Cloud Mode (Layer 2: Auth Token & app_metadata inspection)
   // ============================================================================
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
