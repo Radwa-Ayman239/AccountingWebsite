@@ -2,11 +2,11 @@
 
 import { cookies } from "next/headers";
 
-// Hardcoded credentials for single user
+// Hardcoded credentials for single user - ID matches database schema
 const HARDCODED_USER = {
   username: "Adel Mohamed123",
   password: "w0rkh@st0bed0ne",
-  id: "hardcoded-user-1",
+  id: "00000000-0000-0000-0000-000000000001",
   email: "adel@example.com",
   role: "admin",
 };

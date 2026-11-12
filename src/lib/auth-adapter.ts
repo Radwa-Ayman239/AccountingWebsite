@@ -1,9 +1,9 @@
 import { cookies } from "next/headers";
 import type { UserRole } from "@/lib/types";
 
-// Hardcoded user data
+// Hardcoded user data - ID matches the database schema
 const HARDCODED_USER = {
-  id: "hardcoded-user-1",
+  id: "00000000-0000-0000-0000-000000000001",
   username: "Adel Mohamed123",
   email: "adel@example.com",
   fullName: "Adel Mohamed",

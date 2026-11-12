@@ -1,9 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { cookies } from "next/headers";
 
-// Hardcoded user data
+// Hardcoded user data - ID matches database schema
 const HARDCODED_USER = {
-  id: "hardcoded-user-1",
+  id: "00000000-0000-0000-0000-000000000001",
   username: "Adel Mohamed123",
   email: "adel@example.com",
   role: "admin",
@@ -12,9 +12,15 @@ const HARDCODED_USER = {
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
+  // Redirect register to login since registration is disabled
+  if (pathname.startsWith("/register")) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/login";
+    return NextResponse.redirect(url);
+  }
+
   const isAuthRoute =
     pathname.startsWith("/login") ||
-    pathname.startsWith("/register") ||
     pathname.startsWith("/auth");
 
   const isAdminRoute =
