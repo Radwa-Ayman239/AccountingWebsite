@@ -1,6 +1,8 @@
 "use server";
 
 import { createClient as createServerSupabase } from "@/lib/supabase/server";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 
 export async function login(formData: FormData) {
   const identifier = (
@@ -15,7 +17,7 @@ export async function login(formData: FormData) {
 
   try {
     const supabase = await createServerSupabase();
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email: identifier,
       password,
     });
@@ -23,6 +25,13 @@ export async function login(formData: FormData) {
     if (error) {
       return { error: error.message };
     }
+
+    if (!data.session) {
+      return { error: "فشل إنشاء الجلسة (Failed to create session)" };
+    }
+
+    // Ensure cookies are set by accessing them
+    await cookies();
 
     return { success: true };
   } catch (err: unknown) {

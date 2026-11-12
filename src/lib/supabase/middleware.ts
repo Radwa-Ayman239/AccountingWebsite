@@ -40,9 +40,15 @@ export async function updateSession(request: NextRequest) {
     },
   });
 
+  // Refresh session if it exists
   const {
     data: { user },
+    error,
   } = await supabase.auth.getUser();
+
+  if (error) {
+    console.error("[middleware] Error getting user:", error.message);
+  }
 
   if (!user && !isAuthRoute) {
     const url = request.nextUrl.clone();
