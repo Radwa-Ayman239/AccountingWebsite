@@ -78,6 +78,7 @@ create table if not exists public.worker_attendance (
   delay text not null default '',
   deduction numeric(12,2) not null default 0,
   advances numeric(12,2) not null default 0,
+  paid_amount numeric(12,2) not null default 0,
   notes text not null default '',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()

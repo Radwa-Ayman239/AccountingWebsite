@@ -157,6 +157,11 @@ export function WorkersContent({
     return workerRecords.reduce((sum, r) => sum + (Number(r.advances) || 0), 0);
   }, [workerRecords]);
 
+  // Total actually paid to workers
+  const totalPaid = useMemo(() => {
+    return workerRecords.reduce((sum, r) => sum + (Number(r.paid_amount) || 0), 0);
+  }, [workerRecords]);
+
   // Final Net Salary Due = gross salary - subtractions
   const finalSalary = grossSalary - totalDeductions - totalAdvances;
 
@@ -518,14 +523,13 @@ export function WorkersContent({
                 <Card className="p-3 col-span-2 sm:col-span-1 border-primary bg-primary/10 shadow-sm ring-1 ring-primary/30">
                   <div className="flex items-center gap-1 text-[11px] text-primary font-bold">
                     <Sparkles className="h-3 w-3" />
-                    <span>صافي الراتب النهائي</span>
+                    <span>إجمالي المدفوع فعلياً</span>
                   </div>
                   <div className="text-lg font-black text-primary mt-1">
-                    {finalSalary < 0 ? "-" : ""}
-                    {formatAmount(Math.abs(finalSalary))} L.E
+                    {formatAmount(totalPaid)} L.E
                   </div>
                   <span className="text-[10px] text-primary/80 block mt-0.5 font-medium">
-                    المستحق النهائي للصرف
+                    المبلغ الذي تم دفعه فعلياً للعمال
                   </span>
                 </Card>
               </div>
@@ -542,6 +546,7 @@ export function WorkersContent({
                       <TableHead className="text-center">التأخير</TableHead>
                       <TableHead className="text-center text-destructive">الخصم (L.E)</TableHead>
                       <TableHead className="text-center text-amber-600">السلف (L.E)</TableHead>
+                      <TableHead className="text-center text-green-600">المدفوع (L.E)</TableHead>
                       <TableHead className="min-w-[120px]">ملاحظات</TableHead>
                       <TableHead className="text-center">الإجراءات</TableHead>
                     </TableRow>
@@ -550,7 +555,7 @@ export function WorkersContent({
                     {workerRecords.length === 0 ? (
                       <TableRow>
                         <TableCell
-                          colSpan={9}
+                          colSpan={10}
                           className="h-32 text-center text-muted-foreground"
                         >
                           {t.workers.noRecordsMessage}
@@ -614,6 +619,11 @@ export function WorkersContent({
                             {/* السلف */}
                             <TableCell className="text-center whitespace-nowrap font-medium text-amber-600">
                               {Number(rec.advances) > 0 ? `-${formatAmount(rec.advances)}` : "0.00"}
+                            </TableCell>
+
+                            {/* المدفوع */}
+                            <TableCell className="text-center whitespace-nowrap font-medium text-green-600">
+                              {Number(rec.paid_amount) > 0 ? `+${formatAmount(rec.paid_amount)}` : "0.00"}
                             </TableCell>
 
                             {/* ملاحظات */}
@@ -879,6 +889,17 @@ export function WorkersContent({
                   placeholder="0"
                 />
               </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="r-paid_amount">المبلغ المدفوع فعلياً (L.E)</Label>
+                <Input
+                  id="r-paid_amount"
+                  name="paid_amount"
+                  type="number"
+                  step="0.01"
+                  defaultValue="0"
+                  placeholder="0"
+                />
+              </div>
             </div>
 
             <div className="flex flex-col gap-2">
@@ -978,6 +999,16 @@ export function WorkersContent({
                     type="number"
                     step="0.01"
                     defaultValue={editingRecord.advances}
+                  />
+                </div>
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="er-paid_amount">المبلغ المدفوع فعلياً (L.E)</Label>
+                  <Input
+                    id="er-paid_amount"
+                    name="paid_amount"
+                    type="number"
+                    step="0.01"
+                    defaultValue={editingRecord.paid_amount ?? 0}
                   />
                 </div>
               </div>

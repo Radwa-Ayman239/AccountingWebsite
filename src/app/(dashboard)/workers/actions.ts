@@ -171,7 +171,7 @@ export async function createWorkerAttendanceAction(formData: FormData) {
   const date = (formData.get("date") as string) || new Date().toISOString().split("T")[0];
   const check_in_time = (formData.get("check_in_time") as string)?.trim() || "08:00 ص";
   const departure_time = (formData.get("departure_time") as string)?.trim() || "05:00 م";
-  
+
   // Calculate daily hours or read from form
   const rawHours = formData.get("daily_hours");
   const daily_hours = rawHours && !isNaN(Number(rawHours)) && Number(rawHours) > 0
@@ -181,6 +181,7 @@ export async function createWorkerAttendanceAction(formData: FormData) {
   const delay = (formData.get("delay") as string)?.trim() || "لا يوجد";
   const deduction = Number(formData.get("deduction")) || 0;
   const advances = Number(formData.get("advances")) || 0;
+  const paid_amount = Number(formData.get("paid_amount")) || 0;
   const notes = (formData.get("notes") as string)?.trim() || "";
 
   if (!worker_id) {
@@ -206,6 +207,7 @@ export async function createWorkerAttendanceAction(formData: FormData) {
       delay,
       deduction,
       advances,
+      paid_amount,
       notes,
     })
     .select()
@@ -229,7 +231,7 @@ export async function updateWorkerAttendanceAction(id: string, formData: FormDat
   const date = formData.get("date") as string;
   const check_in_time = (formData.get("check_in_time") as string)?.trim();
   const departure_time = (formData.get("departure_time") as string)?.trim();
-  
+
   const rawHours = formData.get("daily_hours");
   const daily_hours = rawHours && !isNaN(Number(rawHours)) && Number(rawHours) > 0
     ? Number(rawHours)
@@ -238,6 +240,7 @@ export async function updateWorkerAttendanceAction(id: string, formData: FormDat
   const delay = (formData.get("delay") as string)?.trim();
   const deduction = Number(formData.get("deduction")) || 0;
   const advances = Number(formData.get("advances")) || 0;
+  const paid_amount = Number(formData.get("paid_amount")) || 0;
   const notes = (formData.get("notes") as string)?.trim();
 
   const dateObj = new Date(date);
@@ -257,6 +260,7 @@ export async function updateWorkerAttendanceAction(id: string, formData: FormDat
       delay,
       deduction,
       advances,
+      paid_amount,
       notes,
     })
     .eq("id", id)

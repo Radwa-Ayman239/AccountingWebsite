@@ -137,6 +137,7 @@ export interface WorkerAttendance {
   delay: string;              // التأخير
   deduction: number;          // الخصم (L.E)
   advances: number;           // السلف (L.E)
+  paid_amount: number;        // المبلغ المدفوع فعلياً (L.E)
   notes?: string;             // ملاحظات
   created_at: string;
   updated_at: string;

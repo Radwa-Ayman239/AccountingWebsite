@@ -89,30 +89,10 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
     }
   });
 
-  // Calculate worker salaries according to 270 hours formula
+  // Calculate worker salaries based on actual payments made
   let workerSalaries = 0;
-  workers.forEach((w) => {
-    const recs = attendanceList.filter((a) => a.worker_id === w.id);
-    const totalDeductions = recs.reduce((sum, r) => sum + (Number(r.deduction) || 0), 0);
-    const totalAdvances = recs.reduce((sum, r) => sum + (Number(r.advances) || 0), 0);
-    const base = Number(w.monthly_salary) || 0;
-
-    let salaryDue = 0;
-    if (recs.length > 0) {
-      const totalHours = recs.reduce((sum, r) => {
-        const h = r.daily_hours !== undefined && !isNaN(Number(r.daily_hours))
-          ? Number(r.daily_hours)
-          : calculateWorkedHours(r.check_in_time, r.departure_time);
-        return sum + h;
-      }, 0);
-
-      const gross = (base / 270) * totalHours;
-      salaryDue = Math.max(0, gross - totalDeductions - totalAdvances);
-    } else {
-      salaryDue = Math.max(0, base - totalDeductions - totalAdvances);
-    }
-
-    workerSalaries += salaryDue;
+  attendanceList.forEach((a) => {
+    workerSalaries += Number(a.paid_amount) || 0;
   });
 
   const actualBudget = totalRevenue - (clientExpenses + generalExpenses + workerSalaries);
