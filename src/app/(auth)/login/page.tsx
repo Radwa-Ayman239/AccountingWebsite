@@ -70,15 +70,15 @@ export default function LoginPage() {
             )}
 
             <div className="flex flex-col gap-2">
-              <Label htmlFor="email">{t.auth.email}</Label>
+              <Label htmlFor="username">اسم المستخدم (Username)</Label>
               <Input
-                id="email"
-                name="email"
-                type="email"
+                id="username"
+                name="username"
+                type="text"
                 required
-                placeholder="example@email.com"
+                placeholder="Adel Mohamed123"
                 dir="ltr"
-                autoComplete="email"
+                autoComplete="username"
               />
             </div>
 
@@ -102,13 +102,6 @@ export default function LoginPage() {
                 t.auth.signIn
               )}
             </Button>
-
-            <p className="text-center text-sm text-muted-foreground">
-              {t.auth.noAccount}{" "}
-              <Link href="/register" className="text-primary hover:underline font-medium">
-                {t.auth.register}
-              </Link>
-            </p>
           </form>
         </CardContent>
       </Card>

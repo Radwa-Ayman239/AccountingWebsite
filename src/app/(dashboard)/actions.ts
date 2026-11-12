@@ -1,10 +1,10 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { createClient as createServerSupabase } from "@/lib/supabase/server";
+import { cookies } from "next/headers";
 
 export async function signOut() {
-  const supabase = await createServerSupabase();
-  await supabase.auth.signOut();
+  const cookieStore = await cookies();
+  cookieStore.delete("auth_session");
   redirect("/login");
 }

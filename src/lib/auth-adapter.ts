@@ -1,5 +1,14 @@
-import { createClient as createServerSupabase } from "@/lib/supabase/server";
+import { cookies } from "next/headers";
 import type { UserRole } from "@/lib/types";
+
+// Hardcoded user data
+const HARDCODED_USER = {
+  id: "hardcoded-user-1",
+  username: "Adel Mohamed123",
+  email: "adel@example.com",
+  fullName: "Adel Mohamed",
+  role: "admin" as UserRole,
+};
 
 export interface CurrentUser {
   id: string;
@@ -11,41 +20,25 @@ export interface CurrentUser {
 
 export async function getCurrentUser(): Promise<CurrentUser | null> {
   try {
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
+    const cookieStore = await cookies();
+    const authSession = cookieStore.get("auth_session");
 
-    if (userError || !user) return null;
+    if (!authSession) return null;
 
-    let role: UserRole = "viewer";
-    const jwtRole = user.app_metadata?.role;
-    if (jwtRole === "admin" || jwtRole === "viewer") {
-      role = jwtRole;
-    } else {
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", user.id)
-        .maybeSingle();
-
-      if (profile?.role === "admin" || profile?.role === "viewer") {
-        role = profile.role;
-      }
+    const sessionData = JSON.parse(authSession.value);
+    if (sessionData.username === HARDCODED_USER.username) {
+      return {
+        id: HARDCODED_USER.id,
+        email: HARDCODED_USER.email,
+        fullName: HARDCODED_USER.fullName,
+        role: HARDCODED_USER.role,
+        isAdmin: HARDCODED_USER.role === "admin",
+      };
     }
 
-    return {
-      id: user.id,
-      email: user.email ?? "",
-      fullName: user.user_metadata?.full_name,
-      role,
-      isAdmin: role === "admin",
-    };
+    return null;
   } catch (err) {
-    if (err instanceof Error && err.message.startsWith("Supabase is not configured")) {
-      throw err;
-    }
+    console.error("[auth-adapter] Error getting current user:", err);
     return null;
   }
 }
