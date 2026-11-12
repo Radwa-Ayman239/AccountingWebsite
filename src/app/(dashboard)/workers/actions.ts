@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { localStore } from "@/lib/store";
+import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth-adapter";
 import { calculateWorkedHours } from "@/lib/format";
 import type { Worker, WorkerAttendance } from "@/lib/types";
@@ -21,12 +21,19 @@ const ARABIC_DAYS = [
 export async function getWorkersAction(): Promise<Worker[]> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  try {
-    return await localStore.getWorkers();
-  } catch {
-    console.warn("[workers] Failed to read workers from local store");
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("workers")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("[workers] Error fetching workers:", error.message);
     return [];
   }
+
+  return (data ?? []) as Worker[];
 }
 
 export async function createWorkerAction(formData: FormData) {
@@ -43,25 +50,31 @@ export async function createWorkerAction(formData: FormData) {
     return { error: "اسم العامل مطلوب (Worker name is required)" };
   }
 
-  try {
-    const newWorker = await localStore.createWorker({
+  const supabase = await createClient();
+  const { data: newWorker, error } = await supabase
+    .from("workers")
+    .insert({
+      user_id: user.id,
       name,
       job_title: job_title || "",
       monthly_salary,
       phone: phone || "",
       notes: notes || "",
-    });
+      status: "active",
+    })
+    .select()
+    .single();
 
-    revalidatePath("/workers");
-    revalidatePath("/dashboard");
-    revalidatePath("/transactions");
-    revalidatePath("/clients");
-    revalidatePath("/", "layout");
-    return { worker: newWorker };
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "فشل إضافة العامل";
-    return { error: message };
+  if (error) {
+    return { error: error.message };
   }
+
+  revalidatePath("/workers");
+  revalidatePath("/dashboard");
+  revalidatePath("/transactions");
+  revalidatePath("/clients");
+  revalidatePath("/", "layout");
+  return { worker: newWorker };
 }
 
 export async function updateWorkerAction(id: string, formData: FormData) {
@@ -78,54 +91,76 @@ export async function updateWorkerAction(id: string, formData: FormData) {
     return { error: "اسم العامل مطلوب" };
   }
 
-  try {
-    const updated = await localStore.updateWorker(id, {
+  const supabase = await createClient();
+  const { data: updated, error } = await supabase
+    .from("workers")
+    .update({
       name,
       job_title: job_title || "",
       monthly_salary,
       phone: phone || "",
       notes: notes || "",
-    });
+    })
+    .eq("id", id)
+    .select()
+    .single();
 
-    revalidatePath("/workers");
-    revalidatePath("/dashboard");
-    revalidatePath("/transactions");
-    revalidatePath("/clients");
-    revalidatePath("/", "layout");
-    return { worker: updated };
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "فشل تعديل بيانات العامل";
-    return { error: message };
+  if (error) {
+    return { error: error.message };
   }
+
+  revalidatePath("/workers");
+  revalidatePath("/dashboard");
+  revalidatePath("/transactions");
+  revalidatePath("/clients");
+  revalidatePath("/", "layout");
+  return { worker: updated };
 }
 
 export async function deleteWorkerAction(id: string) {
   const user = await getCurrentUser();
   if (!user) return { error: "Not authenticated" };
 
-  try {
-    await localStore.deleteWorker(id);
-    revalidatePath("/workers");
-    revalidatePath("/dashboard");
-    revalidatePath("/transactions");
-    revalidatePath("/clients");
-    revalidatePath("/", "layout");
-    return { success: true };
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "فشل حذف العامل";
-    return { error: message };
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("workers")
+    .delete()
+    .eq("id", id);
+
+  if (error) {
+    return { error: error.message };
   }
+
+  revalidatePath("/workers");
+  revalidatePath("/dashboard");
+  revalidatePath("/transactions");
+  revalidatePath("/clients");
+  revalidatePath("/", "layout");
+  return { success: true };
 }
 
 export async function getWorkerAttendanceAction(workerId?: string): Promise<WorkerAttendance[]> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  try {
-    return await localStore.getWorkerAttendance(workerId);
-  } catch {
-    console.warn("[workers] Failed to read attendance from local store");
+
+  const supabase = await createClient();
+  let query = supabase
+    .from("worker_attendance")
+    .select("*")
+    .order("date", { ascending: false });
+
+  if (workerId) {
+    query = query.eq("worker_id", workerId);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    console.error("[workers] Error fetching attendance:", error.message);
     return [];
   }
+
+  return (data ?? []) as WorkerAttendance[];
 }
 
 export async function createWorkerAttendanceAction(formData: FormData) {
@@ -158,8 +193,10 @@ export async function createWorkerAttendanceAction(formData: FormData) {
     ? "اليوم"
     : ARABIC_DAYS[dateObj.getDay()];
 
-  try {
-    const newRecord = await localStore.createWorkerAttendance({
+  const supabase = await createClient();
+  const { data: newRecord, error } = await supabase
+    .from("worker_attendance")
+    .insert({
       worker_id,
       date,
       day: dayName,
@@ -170,17 +207,19 @@ export async function createWorkerAttendanceAction(formData: FormData) {
       deduction,
       advances,
       notes,
-    });
+    })
+    .select()
+    .single();
 
-    revalidatePath("/workers");
-    revalidatePath("/dashboard");
-    revalidatePath("/transactions");
-    revalidatePath("/", "layout");
-    return { record: newRecord };
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "فشل تسجيل الحضور";
-    return { error: message };
+  if (error) {
+    return { error: error.message };
   }
+
+  revalidatePath("/workers");
+  revalidatePath("/dashboard");
+  revalidatePath("/transactions");
+  revalidatePath("/", "layout");
+  return { record: newRecord };
 }
 
 export async function updateWorkerAttendanceAction(id: string, formData: FormData) {
@@ -206,8 +245,10 @@ export async function updateWorkerAttendanceAction(id: string, formData: FormDat
     ? undefined
     : ARABIC_DAYS[dateObj.getDay()];
 
-  try {
-    const updated = await localStore.updateWorkerAttendance(id, {
+  const supabase = await createClient();
+  const { data: updated, error } = await supabase
+    .from("worker_attendance")
+    .update({
       date,
       ...(dayName ? { day: dayName } : {}),
       check_in_time,
@@ -217,32 +258,39 @@ export async function updateWorkerAttendanceAction(id: string, formData: FormDat
       deduction,
       advances,
       notes,
-    });
+    })
+    .eq("id", id)
+    .select()
+    .single();
 
-    revalidatePath("/workers");
-    revalidatePath("/dashboard");
-    revalidatePath("/transactions");
-    revalidatePath("/", "layout");
-    return { record: updated };
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "فشل تعديل السجل";
-    return { error: message };
+  if (error) {
+    return { error: error.message };
   }
+
+  revalidatePath("/workers");
+  revalidatePath("/dashboard");
+  revalidatePath("/transactions");
+  revalidatePath("/", "layout");
+  return { record: updated };
 }
 
 export async function deleteWorkerAttendanceAction(id: string) {
   const user = await getCurrentUser();
   if (!user) return { error: "Not authenticated" };
 
-  try {
-    await localStore.deleteWorkerAttendance(id);
-    revalidatePath("/workers");
-    revalidatePath("/dashboard");
-    revalidatePath("/transactions");
-    revalidatePath("/", "layout");
-    return { success: true };
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "فشل حذف السجل";
-    return { error: message };
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("worker_attendance")
+    .delete()
+    .eq("id", id);
+
+  if (error) {
+    return { error: error.message };
   }
+
+  revalidatePath("/workers");
+  revalidatePath("/dashboard");
+  revalidatePath("/transactions");
+  revalidatePath("/", "layout");
+  return { success: true };
 }

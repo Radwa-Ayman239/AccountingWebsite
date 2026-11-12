@@ -1,3 +1,4 @@
+-- SUPERSEDED. Do not run this file. Use 003_full_production_schema.sql instead.
 -- Enable UUID extension
 create extension if not exists "uuid-ossp";
 

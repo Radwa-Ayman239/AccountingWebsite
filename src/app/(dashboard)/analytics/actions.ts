@@ -2,8 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { getCurrentUser, isSupabaseActive, shouldUseSupabase } from "@/lib/auth-adapter";
-import { localStore } from "@/lib/store";
+import { getCurrentUser } from "@/lib/auth-adapter";
 import type { CategoryBreakdown, ClientProfitability, MonthlyData, Transaction } from "@/lib/types";
 
 export type PeriodType = "last30Days" | "last90Days" | "last6Months" | "lastYear" | "allTime";
@@ -49,34 +48,22 @@ export async function getAnalyticsData(period: PeriodType = "last6Months"): Prom
     startDate = d.toISOString().split("T")[0];
   }
 
-  let txList: Transaction[] = [];
-  let fetchedFromSupabase = false;
+  const supabase = await createClient();
+  let txQuery = supabase
+    .from("transactions")
+    .select("id, client_id, date, type, category, amount, client:clients(name)")
+    .order("date", { ascending: true });
 
-  if (shouldUseSupabase(user)) {
-    try {
-      const supabase = await createClient();
-      let txQuery = supabase
-        .from("transactions")
-        .select("id, client_id, date, type, category, amount, client:clients(name)")
-        .order("date", { ascending: true });
+  if (startDate) {
+    txQuery = txQuery.gte("date", startDate);
+  }
+  const { data, error } = await txQuery;
 
-      if (startDate) {
-        txQuery = txQuery.gte("date", startDate);
-      }
-      const { data, error } = await txQuery;
-      if (!error && data) {
-        txList = data as unknown as Transaction[];
-        fetchedFromSupabase = true;
-      }
-    } catch {
-      // Fallback
-    }
+  if (error) {
+    console.error("[analytics] Error fetching transactions:", error.message);
   }
 
-  if (!fetchedFromSupabase) {
-    const all = await localStore.getTransactions();
-    txList = all.filter((t) => (!startDate ? true : t.date >= startDate));
-  }
+  const txList = (data ?? []) as unknown as Transaction[];
 
   let totalIncome = 0;
   let totalExpenses = 0;

@@ -2,8 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { getCurrentUser, isSupabaseActive, shouldUseSupabase } from "@/lib/auth-adapter";
-import { localStore } from "@/lib/store";
+import { getCurrentUser } from "@/lib/auth-adapter";
 import { calculateWorkedHours } from "@/lib/format";
 import type {
   DashboardMetrics,
@@ -19,54 +18,37 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
-  let transactions: { type: string; category: string; amount: number; payment_status: string; client_id?: string }[] = [];
-  let clientCount = 0;
+  const supabase = await createClient();
+
+  // Fetch transactions
+  const { data: txData } = await supabase
+    .from("transactions")
+    .select("type, category, amount, payment_status, client_id");
+
+  const transactions = (txData ?? []).map((t) => ({ ...t, amount: Number(t.amount) }));
+
+  // Fetch client count
+  const { count } = await supabase
+    .from("clients")
+    .select("*", { count: "exact", head: true });
+  const clientCount = count ?? 0;
+
+  // Fetch workers and attendance from Supabase
   let workers: Worker[] = [];
   let attendanceList: WorkerAttendance[] = [];
 
-  let fetchedFromSupabase = false;
+  const { data: workersData } = await supabase
+    .from("workers")
+    .select("*");
+  workers = (workersData ?? []) as Worker[];
 
-  if (shouldUseSupabase(user)) {
-    try {
-      const supabase = await createClient();
-      const { data: txData, error: txErr } = await supabase
-        .from("transactions")
-        .select("type, category, amount, payment_status, client_id");
-
-      if (!txErr && txData) {
-        transactions = txData.map((t) => ({ ...t, amount: Number(t.amount) }));
-
-        const { count } = await supabase
-          .from("clients")
-          .select("*", { count: "exact", head: true });
-        clientCount = count ?? 0;
-
-        fetchedFromSupabase = true;
-      }
-    } catch {
-      // Fall through to localStore
-    }
-  }
-
-  if (!fetchedFromSupabase) {
-    const txData = await localStore.getTransactions();
-    transactions = txData.map((t) => ({
-      type: t.type,
-      category: t.category,
-      amount: Number(t.amount),
-      payment_status: t.payment_status,
-      client_id: t.client_id,
-    }));
-    const clients = await localStore.getClients();
-    clientCount = clients.length;
-  }
-
-  try {
-    workers = await localStore.getWorkers();
-    attendanceList = await localStore.getWorkerAttendance();
-  } catch {
-    workers = [];
-    attendanceList = [];
+  if (workers.length > 0) {
+    const workerIds = workers.map((w) => w.id);
+    const { data: attData } = await supabase
+      .from("worker_attendance")
+      .select("*")
+      .in("worker_id", workerIds);
+    attendanceList = (attData ?? []) as WorkerAttendance[];
   }
 
   let totalRevenue = 0;
@@ -80,14 +62,12 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
   const generalCategories = ["rent", "utilities", "maintenance", "overhead"];
 
   transactions.forEach((t) => {
-    // Total Overdue and Pending
     if (t.payment_status === "overdue") {
       totalOverdue += t.amount;
     } else if (t.payment_status === "pending") {
       totalPending += t.amount;
     }
 
-    // Revenue and Expenses counted when confirmed (paid)
     if (t.payment_status === "paid") {
       if (t.type === "income") {
         totalRevenue += t.amount;
@@ -126,7 +106,6 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
         return sum + h;
       }, 0);
 
-      // (monthly salary / 270) * total hours spent at work
       const gross = (base / 270) * totalHours;
       salaryDue = Math.max(0, gross - totalDeductions - totalAdvances);
     } else {
@@ -136,7 +115,6 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
     workerSalaries += salaryDue;
   });
 
-  // Actual budget in cash = All actual income - (Client expenses + General expenses + Worker salaries)
   const actualBudget = totalRevenue - (clientExpenses + generalExpenses + workerSalaries);
 
   return {
@@ -161,97 +139,65 @@ export async function getGeneralTransactions(): Promise<Transaction[]> {
 
   const generalCategories = ["rent", "utilities", "maintenance", "overhead"];
 
-  if (shouldUseSupabase(user)) {
-    try {
-      const supabase = await createClient();
-      const { data, error } = await supabase
-        .from("transactions")
-        .select("*, client:clients(id, name)")
-        .eq("type", "expense")
-        .order("date", { ascending: false });
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("transactions")
+    .select("*, client:clients(id, name)")
+    .eq("type", "expense")
+    .order("date", { ascending: false });
 
-      if (!error && data) {
-        return data.filter((t) =>
-          !t.client_id ||
-          t.client_id === "general" ||
-          generalCategories.includes(t.category)
-        ) as Transaction[];
-      }
-    } catch {
-      // Fallback
-    }
+  if (error) {
+    console.error("[dashboard] Error fetching general transactions:", error.message);
+    return [];
   }
 
-  const all = await localStore.getTransactions();
-
-  return all.filter((t) => {
-    return (
-      t.type === "expense" &&
-      (!t.client_id ||
-        t.client_id === "general" ||
-        generalCategories.includes(t.category))
-    );
-  });
+  return ((data ?? []) as Transaction[]).filter((t) =>
+    !t.client_id ||
+    t.client_id === "general" ||
+    generalCategories.includes(t.category)
+  );
 }
 
 export async function getRecentTransactions(): Promise<Transaction[]> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
-  if (shouldUseSupabase(user)) {
-    try {
-      const supabase = await createClient();
-      const { data, error } = await supabase
-        .from("transactions")
-        .select("*, client:clients(id, name)")
-        .order("date", { ascending: false })
-        .limit(5);
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("transactions")
+    .select("*, client:clients(id, name)")
+    .order("date", { ascending: false })
+    .limit(5);
 
-      if (!error && data) {
-        return data as Transaction[];
-      }
-    } catch {
-      // Fallback
-    }
+  if (error) {
+    console.error("[dashboard] Error fetching recent transactions:", error.message);
+    return [];
   }
 
-  const all = await localStore.getTransactions();
-  return all.slice(0, 5);
+  return (data ?? []) as Transaction[];
 }
 
 export async function getMonthlyTrend(): Promise<MonthlyData[]> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
-  let transactions: { date: string; type: string; amount: number }[] = [];
-  let fetchedFromSupabase = false;
+  const supabase = await createClient();
+  const sixMonthsAgo = new Date();
+  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+  const startDate = sixMonthsAgo.toISOString().split("T")[0];
 
-  if (shouldUseSupabase(user)) {
-    try {
-      const supabase = await createClient();
-      const sixMonthsAgo = new Date();
-      sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-      const startDate = sixMonthsAgo.toISOString().split("T")[0];
+  const { data, error } = await supabase
+    .from("transactions")
+    .select("date, type, amount")
+    .gte("date", startDate)
+    .order("date", { ascending: true });
 
-      const { data, error } = await supabase
-        .from("transactions")
-        .select("date, type, amount")
-        .gte("date", startDate)
-        .order("date", { ascending: true });
-
-      if (!error && data) {
-        transactions = data.map((t) => ({ ...t, amount: Number(t.amount) }));
-        fetchedFromSupabase = true;
-      }
-    } catch {
-      // Fallback
-    }
+  if (error) {
+    console.error("[dashboard] Error fetching monthly trend:", error.message);
+    return [];
   }
 
-  if (!fetchedFromSupabase) {
-    const all = await localStore.getTransactions();
-    transactions = all.map((t) => ({ date: t.date, type: t.type, amount: Number(t.amount) }));
-  }
+  const transactions = (data ?? []).map((t) => ({ ...t, amount: Number(t.amount) }));
 
   const monthlyMap = new Map<string, { revenue: number; expenses: number }>();
 
@@ -275,32 +221,18 @@ export async function getExpenseBreakdown(): Promise<CategoryBreakdown[]> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
-  let transactions: { category: string; amount: number }[] = [];
-  let fetchedFromSupabase = false;
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("transactions")
+    .select("category, amount")
+    .eq("type", "expense");
 
-  if (shouldUseSupabase(user)) {
-    try {
-      const supabase = await createClient();
-      const { data, error } = await supabase
-        .from("transactions")
-        .select("category, amount")
-        .eq("type", "expense");
-
-      if (!error && data) {
-        transactions = data.map((t) => ({ ...t, amount: Number(t.amount) }));
-        fetchedFromSupabase = true;
-      }
-    } catch {
-      // Fallback
-    }
+  if (error) {
+    console.error("[dashboard] Error fetching expense breakdown:", error.message);
+    return [];
   }
 
-  if (!fetchedFromSupabase) {
-    const all = await localStore.getTransactions();
-    transactions = all
-      .filter((t) => t.type === "expense")
-      .map((t) => ({ category: t.category, amount: Number(t.amount) }));
-  }
+  const transactions = (data ?? []).map((t) => ({ ...t, amount: Number(t.amount) }));
 
   const categoryMap = new Map<string, number>();
 
@@ -319,41 +251,24 @@ export async function getClientProfitability(): Promise<ClientProfitability[]> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
-  let clients: { id: string; name: string }[] = [];
-  let transactions: { client_id: string; type: string; amount: number }[] = [];
-  let fetchedFromSupabase = false;
+  const supabase = await createClient();
+  const { data: clientsData, error: clientErr } = await supabase
+    .from("clients")
+    .select("id, name");
 
-  if (shouldUseSupabase(user)) {
-    try {
-      const supabase = await createClient();
-      const { data: clientsData, error: clientErr } = await supabase
-        .from("clients")
-        .select("id, name");
+  const { data: txData, error: txErr } = await supabase
+    .from("transactions")
+    .select("client_id, type, amount");
 
-      const { data: txData, error: txErr } = await supabase
-        .from("transactions")
-        .select("client_id, type, amount");
-
-      if (!clientErr && !txErr && clientsData && txData) {
-        clients = clientsData;
-        transactions = txData
-          .filter((t) => t.client_id && t.client_id !== "general")
-          .map((t) => ({ client_id: t.client_id!, type: t.type, amount: Number(t.amount) }));
-        fetchedFromSupabase = true;
-      }
-    } catch {
-      // Fallback
-    }
+  if (clientErr || txErr) {
+    console.error("[dashboard] Error fetching client profitability:", clientErr?.message, txErr?.message);
+    return [];
   }
 
-  if (!fetchedFromSupabase) {
-    const clientsData = await localStore.getClients();
-    clients = clientsData.map((c) => ({ id: c.id, name: c.name }));
-    const txData = await localStore.getTransactions();
-    transactions = txData
-      .filter((t) => t.client_id && t.client_id !== "general")
-      .map((t) => ({ client_id: t.client_id!, type: t.type, amount: Number(t.amount) }));
-  }
+  const clients = clientsData ?? [];
+  const transactions = (txData ?? [])
+    .filter((t) => t.client_id && t.client_id !== "general")
+    .map((t) => ({ client_id: t.client_id!, type: t.type, amount: Number(t.amount) }));
 
   if (clients.length === 0) return [];
 

@@ -1,3 +1,4 @@
+-- SUPERSEDED. Do not run this file. Use 003_full_production_schema.sql instead.
 -- ==============================================================================
 -- 002_rbac_schema.sql: 3-Layer Role-Based Access Control (RBAC)
 -- Roles: 'admin', 'viewer'

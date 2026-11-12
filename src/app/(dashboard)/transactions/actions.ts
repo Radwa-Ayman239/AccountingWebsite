@@ -1,8 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { getCurrentUser, isSupabaseActive, shouldUseSupabase } from "@/lib/auth-adapter";
-import { localStore } from "@/lib/store";
+import { getCurrentUser } from "@/lib/auth-adapter";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { Transaction, Client, TransactionType, Category, PaymentStatus } from "@/lib/types";
@@ -21,74 +20,40 @@ export async function getTransactions(filters?: TransactionFilterParams): Promis
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
-  if (shouldUseSupabase(user)) {
-    try {
-      const supabase = await createClient();
-      let query = supabase
-        .from("transactions")
-        .select("*, client:clients(id, name)")
-        .order("date", { ascending: false });
-
-      if (filters?.type && filters.type !== "all") {
-        query = query.eq("type", filters.type);
-      }
-      if (filters?.category && filters.category !== "all") {
-        query = query.eq("category", filters.category);
-      }
-      if (filters?.payment_status && filters.payment_status !== "all") {
-        query = query.eq("payment_status", filters.payment_status);
-      }
-      if (filters?.client_id && filters.client_id !== "all") {
-        query = query.eq("client_id", filters.client_id);
-      }
-      if (filters?.startDate) {
-        query = query.gte("date", filters.startDate);
-      }
-      if (filters?.endDate) {
-        query = query.lte("date", filters.endDate);
-      }
-
-      const { data, error } = await query;
-      if (error) throw error;
-
-      let results = (data ?? []) as Transaction[];
-
-      if (filters?.search?.trim()) {
-        const searchLower = filters.search.toLowerCase().trim();
-        results = results.filter(
-          (tx) =>
-            tx.description?.toLowerCase().includes(searchLower) ||
-            tx.client?.name?.toLowerCase().includes(searchLower)
-        );
-      }
-
-      return results;
-    } catch {
-      // Fallback to local store
-    }
-  }
-
-  // Local Store Mode (Shared Company Database)
-  let results = await localStore.getTransactions();
+  const supabase = await createClient();
+  let query = supabase
+    .from("transactions")
+    .select("*, client:clients(id, name)")
+    .order("date", { ascending: false });
 
   if (filters?.type && filters.type !== "all") {
-    results = results.filter((tx) => tx.type === filters.type);
+    query = query.eq("type", filters.type);
   }
   if (filters?.category && filters.category !== "all") {
-    results = results.filter((tx) => tx.category === filters.category);
+    query = query.eq("category", filters.category);
   }
   if (filters?.payment_status && filters.payment_status !== "all") {
-    results = results.filter((tx) => tx.payment_status === filters.payment_status);
+    query = query.eq("payment_status", filters.payment_status);
   }
   if (filters?.client_id && filters.client_id !== "all") {
-    results = results.filter((tx) => tx.client_id === filters.client_id);
+    query = query.eq("client_id", filters.client_id);
   }
   if (filters?.startDate) {
-    results = results.filter((tx) => tx.date >= filters.startDate!);
+    query = query.gte("date", filters.startDate);
   }
   if (filters?.endDate) {
-    results = results.filter((tx) => tx.date <= filters.endDate!);
+    query = query.lte("date", filters.endDate);
   }
+
+  const { data, error } = await query;
+
+  if (error) {
+    console.error("[transactions] Error fetching:", error.message);
+    return [];
+  }
+
+  let results = (data ?? []) as Transaction[];
+
   if (filters?.search?.trim()) {
     const searchLower = filters.search.toLowerCase().trim();
     results = results.filter(
@@ -105,24 +70,18 @@ export async function getClientsForSelect(): Promise<Pick<Client, "id" | "name">
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
-  if (shouldUseSupabase(user)) {
-    try {
-      const supabase = await createClient();
-      const { data, error } = await supabase
-        .from("clients")
-        .select("id, name")
-        .order("name", { ascending: true });
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("clients")
+    .select("id, name")
+    .order("name", { ascending: true });
 
-      if (!error && data) return data;
-    } catch {
-      // Fallback to local store
-    }
+  if (error) {
+    console.error("[transactions] Error fetching clients for select:", error.message);
+    return [];
   }
 
-  const clients = await localStore.getClients();
-  return clients
-    .map((c) => ({ id: c.id, name: c.name }))
-    .sort((a, b) => a.name.localeCompare(b.name));
+  return data ?? [];
 }
 
 // Any authenticated user (Admin or Viewer/Worker) CAN create transactions
@@ -146,36 +105,10 @@ export async function createTransactionAction(formData: FormData) {
     return { error: "Date is required" };
   }
 
-  if (shouldUseSupabase(user)) {
-    try {
-      const supabase = await createClient();
-      const { error } = await supabase.from("transactions").insert({
-        user_id: user.id,
-        client_id: client_id === "general" ? null : client_id,
-        date,
-        type,
-        category,
-        description: description.trim(),
-        amount,
-        payment_status,
-      });
-      if (!error) {
-        revalidatePath("/transactions");
-        revalidatePath("/clients");
-        revalidatePath("/workers");
-        revalidatePath("/dashboard");
-        revalidatePath("/analytics");
-        revalidatePath("/", "layout");
-        return { success: true };
-      }
-    } catch {
-      // Fallback to local store
-    }
-  }
-
-  await localStore.createTransaction({
+  const supabase = await createClient();
+  const { error } = await supabase.from("transactions").insert({
     user_id: user.id,
-    client_id,
+    client_id: client_id === "general" ? null : client_id,
     date,
     type,
     category,
@@ -183,6 +116,10 @@ export async function createTransactionAction(formData: FormData) {
     amount,
     payment_status,
   });
+
+  if (error) {
+    return { error: error.message };
+  }
 
   revalidatePath("/transactions");
   revalidatePath("/clients");
@@ -214,44 +151,23 @@ export async function updateTransactionAction(id: string, formData: FormData) {
     return { error: "Amount must be greater than 0" };
   }
 
-  if (shouldUseSupabase(user)) {
-    try {
-      const supabase = await createClient();
-      const { error } = await supabase
-        .from("transactions")
-        .update({
-          client_id: client_id === "general" ? null : client_id,
-          date,
-          type,
-          category,
-          description: description.trim(),
-          amount,
-          payment_status,
-        })
-        .eq("id", id);
-      if (!error) {
-        revalidatePath("/transactions");
-        revalidatePath("/clients");
-        revalidatePath("/workers");
-        revalidatePath("/dashboard");
-        revalidatePath("/analytics");
-        revalidatePath("/", "layout");
-        return { success: true };
-      }
-    } catch {
-      // Fallback to local store
-    }
-  }
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("transactions")
+    .update({
+      client_id: client_id === "general" ? null : client_id,
+      date,
+      type,
+      category,
+      description: description.trim(),
+      amount,
+      payment_status,
+    })
+    .eq("id", id);
 
-  await localStore.updateTransaction(id, user.id, {
-    client_id,
-    date,
-    type,
-    category,
-    description: description.trim(),
-    amount,
-    payment_status,
-  });
+  if (error) {
+    return { error: error.message };
+  }
 
   revalidatePath("/transactions");
   revalidatePath("/clients");
@@ -270,28 +186,15 @@ export async function deleteTransactionAction(id: string) {
     return { error: "403: غير مصرح لك بحذف المعاملات - متاح للمسؤول فقط (Only Admins can delete transactions)" };
   }
 
-  if (shouldUseSupabase(user)) {
-    try {
-      const supabase = await createClient();
-      const { error } = await supabase
-        .from("transactions")
-        .delete()
-        .eq("id", id);
-      if (!error) {
-        revalidatePath("/transactions");
-        revalidatePath("/clients");
-        revalidatePath("/workers");
-        revalidatePath("/dashboard");
-        revalidatePath("/analytics");
-        revalidatePath("/", "layout");
-        return { success: true };
-      }
-    } catch {
-      // Fallback to local store
-    }
-  }
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("transactions")
+    .delete()
+    .eq("id", id);
 
-  await localStore.deleteTransaction(id, user.id);
+  if (error) {
+    return { error: error.message };
+  }
 
   revalidatePath("/transactions");
   revalidatePath("/clients");

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useLocale } from "@/lib/i18n/context";
 import { login } from "./actions";
 import { Button } from "@/components/ui/button";
@@ -62,15 +63,15 @@ export default function LoginPage() {
             )}
 
             <div className="flex flex-col gap-2">
-              <Label htmlFor="email">اسم المستخدم (User Name)</Label>
+              <Label htmlFor="email">البريد الإلكتروني (Email)</Label>
               <Input
                 id="email"
                 name="email"
-                type="text"
+                type="email"
                 required
-                placeholder="Adel Mohamed123"
+                placeholder="example@email.com"
                 dir="ltr"
-                autoComplete="username"
+                autoComplete="email"
               />
             </div>
 
@@ -94,6 +95,13 @@ export default function LoginPage() {
                 t.auth.signIn
               )}
             </Button>
+
+            <p className="text-center text-sm text-muted-foreground">
+              ليس لديك حساب؟{" "}
+              <Link href="/register" className="text-primary hover:underline font-medium">
+                إنشاء حساب جديد
+              </Link>
+            </p>
           </form>
         </CardContent>
       </Card>

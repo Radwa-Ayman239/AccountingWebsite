@@ -115,11 +115,13 @@ export interface UserSettings {
 
 export interface Worker {
   id: string;
+  user_id?: string;           // معرّف المستخدم المالك
   name: string;               // اسم العامل
   job_title?: string;         // الوظيفة / الصنعة
   monthly_salary: number;     // المرتب الشهري الأساسي (على أساس 270 ساعة)
   phone?: string;             // رقم الهاتف
   notes?: string;             // ملاحظات
+  status?: string;            // حالة العامل (active / inactive)
   created_at: string;
   updated_at: string;
 }

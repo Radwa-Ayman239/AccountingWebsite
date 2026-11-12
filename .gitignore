@@ -25,6 +25,9 @@ yarn-error.log*
 # local env files
 .env*.local
 
+# leftover local-mode database (not used; contains plaintext credentials)
+/data/
+
 # vercel
 .vercel
 
