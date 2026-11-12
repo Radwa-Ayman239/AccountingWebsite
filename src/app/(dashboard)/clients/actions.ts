@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth-adapter";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { Client, ProjectStatus } from "@/lib/types";
+import { getSupabaseEnv } from "@/lib/supabase/env";
 
 export async function getClients(): Promise<Client[]> {
   const user = await getCurrentUser();
@@ -83,41 +84,55 @@ export async function getClients(): Promise<Client[]> {
 }
 
 export async function createClientAction(formData: FormData) {
-  const user = await getCurrentUser();
-  if (!user) return { error: "Not authenticated" };
-  if (!user.isAdmin) {
-    return { error: "403: غير مصرح لك بإضافة عملاء - مطلوب صلاحيات مسؤول (Admin privileges required)" };
+  try {
+    const user = await getCurrentUser();
+    if (!user) return { error: "Not authenticated" };
+    if (!user.isAdmin) {
+      return { error: "403: غير مصرح لك بإضافة عملاء - مطلوب صلاحيات مسؤول (Admin privileges required)" };
+    }
+
+    const name = formData.get("name") as string;
+    const contact_info = formData.get("contact_info") as string;
+    const project_status = (formData.get("project_status") as ProjectStatus) || "active";
+    const notes = formData.get("notes") as string;
+
+    if (!name?.trim()) {
+      return { error: "Name is required" };
+    }
+
+    // Log Supabase configuration
+    const { url } = getSupabaseEnv();
+    console.log("[createClient] Supabase URL:", url);
+    console.log("[createClient] User ID:", user.id);
+    console.log("[createClient] Creating client:", name);
+
+    const supabase = await createClient();
+    const { error } = await supabase.from("clients").insert({
+      user_id: user.id,
+      name: name.trim(),
+      contact_info: contact_info?.trim() ?? "",
+      project_status,
+      notes: notes?.trim() ?? "",
+    });
+
+    if (error) {
+      console.error("[createClient] Error:", error.message);
+      console.error("[createClient] Error details:", JSON.stringify(error));
+      return { error: error.message };
+    }
+
+    console.log("[createClient] Success");
+    revalidatePath("/clients");
+    revalidatePath("/transactions");
+    revalidatePath("/workers");
+    revalidatePath("/dashboard");
+    revalidatePath("/analytics");
+    revalidatePath("/", "layout");
+    return { success: true };
+  } catch (err) {
+    console.error("[createClient] Unexpected error:", err);
+    return { error: err instanceof Error ? err.message : "Unknown error" };
   }
-
-  const name = formData.get("name") as string;
-  const contact_info = formData.get("contact_info") as string;
-  const project_status = (formData.get("project_status") as ProjectStatus) || "active";
-  const notes = formData.get("notes") as string;
-
-  if (!name?.trim()) {
-    return { error: "Name is required" };
-  }
-
-  const supabase = await createClient();
-  const { error } = await supabase.from("clients").insert({
-    user_id: user.id,
-    name: name.trim(),
-    contact_info: contact_info?.trim() ?? "",
-    project_status,
-    notes: notes?.trim() ?? "",
-  });
-
-  if (error) {
-    return { error: error.message };
-  }
-
-  revalidatePath("/clients");
-  revalidatePath("/transactions");
-  revalidatePath("/workers");
-  revalidatePath("/dashboard");
-  revalidatePath("/analytics");
-  revalidatePath("/", "layout");
-  return { success: true };
 }
 
 export async function updateClientAction(id: string, formData: FormData) {
