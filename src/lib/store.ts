@@ -20,7 +20,15 @@ export interface LocalDatabase {
   worker_attendance: WorkerAttendance[];
 }
 
-const DB_PATH = path.join(process.cwd(), "data", "database.json");
+/**
+ * On Vercel (serverless), process.cwd() is /var/task which is read-only.
+ * Only /tmp is writable. Detect Vercel and use /tmp/data instead.
+ */
+const IS_VERCEL = Boolean(process.env.VERCEL);
+const DB_DIR = IS_VERCEL
+  ? path.join("/tmp", "data")
+  : path.join(process.cwd(), "data");
+const DB_PATH = path.join(DB_DIR, "database.json");
 
 const INITIAL_DB: LocalDatabase = {
   users: [],
@@ -37,8 +45,9 @@ const INITIAL_DB: LocalDatabase = {
  * server-action modules and page-render modules, causing the page to
  * read stale data even after a successful save.
  *
- * For production-scale (thousands of records), consider migrating to
- * SQLite via better-sqlite3 for indexed queries and concurrent writes.
+ * On Vercel, the filesystem is read-only except /tmp, so the local
+ * store uses /tmp/data/database.json. Note: /tmp is ephemeral and
+ * not shared across serverless invocations.
  */
 async function ensureDb(): Promise<LocalDatabase> {
   try {
@@ -49,15 +58,24 @@ async function ensureDb(): Promise<LocalDatabase> {
     return db;
   } catch {
     // File doesn't exist yet — bootstrap it
-    await fs.mkdir(path.dirname(DB_PATH), { recursive: true });
-    await fs.writeFile(DB_PATH, JSON.stringify(INITIAL_DB, null, 2), "utf-8");
+    try {
+      await fs.mkdir(path.dirname(DB_PATH), { recursive: true });
+      await fs.writeFile(DB_PATH, JSON.stringify(INITIAL_DB, null, 2), "utf-8");
+    } catch {
+      // If we can't write (e.g. read-only filesystem), return in-memory default
+      console.warn("[localStore] Cannot write to filesystem, returning in-memory defaults");
+    }
     return { ...INITIAL_DB, workers: [], worker_attendance: [] };
   }
 }
 
 async function saveDb(db: LocalDatabase): Promise<void> {
-  await fs.mkdir(path.dirname(DB_PATH), { recursive: true });
-  await fs.writeFile(DB_PATH, JSON.stringify(db, null, 2), "utf-8");
+  try {
+    await fs.mkdir(path.dirname(DB_PATH), { recursive: true });
+    await fs.writeFile(DB_PATH, JSON.stringify(db, null, 2), "utf-8");
+  } catch {
+    console.warn("[localStore] Cannot save to filesystem — data will not persist");
+  }
 }
 
 export const localStore = {

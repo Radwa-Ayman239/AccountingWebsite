@@ -36,9 +36,15 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
       .select("*", { count: "exact", head: true });
     clientCount = count ?? 0;
 
-    // Workers from local store fallback
-    workers = await localStore.getWorkers();
-    attendanceList = await localStore.getWorkerAttendance();
+    // Workers from local store fallback (workers are local-only for now)
+    try {
+      workers = await localStore.getWorkers();
+      attendanceList = await localStore.getWorkerAttendance();
+    } catch {
+      // On Vercel, localStore may fail — continue with empty arrays
+      workers = [];
+      attendanceList = [];
+    }
   } else {
     const txData = await localStore.getTransactions();
     transactions = txData.map((t) => ({
@@ -146,6 +152,22 @@ export async function getGeneralTransactions(): Promise<Transaction[]> {
   if (!user) redirect("/login");
 
   const generalCategories = ["rent", "utilities", "maintenance", "overhead"];
+
+  if (isSupabaseActive()) {
+    const supabase = await createClient();
+    const { data } = await supabase
+      .from("transactions")
+      .select("*, client:clients(id, name)")
+      .eq("type", "expense")
+      .order("date", { ascending: false });
+
+    return (data ?? []).filter((t) =>
+      !t.client_id ||
+      t.client_id === "general" ||
+      generalCategories.includes(t.category)
+    ) as Transaction[];
+  }
+
   const all = await localStore.getTransactions();
 
   return all.filter((t) => {

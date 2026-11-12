@@ -21,7 +21,12 @@ const ARABIC_DAYS = [
 export async function getWorkersAction(): Promise<Worker[]> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  return await localStore.getWorkers();
+  try {
+    return await localStore.getWorkers();
+  } catch {
+    console.warn("[workers] Failed to read workers from local store");
+    return [];
+  }
 }
 
 export async function createWorkerAction(formData: FormData) {
@@ -115,7 +120,12 @@ export async function deleteWorkerAction(id: string) {
 export async function getWorkerAttendanceAction(workerId?: string): Promise<WorkerAttendance[]> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  return await localStore.getWorkerAttendance(workerId);
+  try {
+    return await localStore.getWorkerAttendance(workerId);
+  } catch {
+    console.warn("[workers] Failed to read attendance from local store");
+    return [];
+  }
 }
 
 export async function createWorkerAttendanceAction(formData: FormData) {
