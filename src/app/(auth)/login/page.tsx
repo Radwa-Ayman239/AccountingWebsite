@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useLocale } from "@/lib/i18n/context";
@@ -22,6 +22,13 @@ export default function LoginPage() {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("error") === "auth_error") {
+      setError(t.auth.verifyEmailMessage);
+    }
+  }, [t]);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -63,7 +70,7 @@ export default function LoginPage() {
             )}
 
             <div className="flex flex-col gap-2">
-              <Label htmlFor="email">البريد الإلكتروني (Email)</Label>
+              <Label htmlFor="email">{t.auth.email}</Label>
               <Input
                 id="email"
                 name="email"
@@ -97,9 +104,9 @@ export default function LoginPage() {
             </Button>
 
             <p className="text-center text-sm text-muted-foreground">
-              ليس لديك حساب؟{" "}
+              {t.auth.noAccount}{" "}
               <Link href="/register" className="text-primary hover:underline font-medium">
-                إنشاء حساب جديد
+                {t.auth.register}
               </Link>
             </p>
           </form>
